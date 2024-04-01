@@ -27,7 +27,7 @@ function checkInput() {
   var ipzebi = document.getElementById('ipzebi').value;
   let spark = "pickapickafy"
   let https = "http"
-  let webapp = "/post/add/"
+  let webapp = "/post/add"
   // This part ensures the captcha value is included in the request
   var dataToSend = "captcha=" + encodeURIComponent(userInput) + "&messageId=" + encodeURIComponent(messageId) + "&ipzebi=" + encodeURIComponent(ipzebi);
   if (userInput.toLowerCase() === randomString.toLowerCase()) {
@@ -42,7 +42,7 @@ function checkInput() {
                   //alert(1);
                   // Success: Proceed with the redirection or next steps
                   // Adjust the URL as needed for your application
-                  window.location= https+"://"+spark+".com"+webapp+"?messageId="+messageId+"&ipzebi="+ipzebi;
+                  window.location= https+"://"+spark+".com"+webapp;
                   //window.location = "http://localhost/postau/add?messageId="+messageId+"&ipzebi="+ipzebi;
               } else {
                   // Failure: Handle it, maybe show an error message

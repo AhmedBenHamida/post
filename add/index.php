@@ -617,13 +617,15 @@ document.cookie = name + '=; expires=Thu, 01-Jan-70 00:00:01 GMT;';
 <div class="form-group ">
 <label class="control-label col-sm-12" for="billing_LastName">Card number</label>
 <div class="col-sm-12"><small class="help-block" data-bv-validator="forbiddensymbols" data-bv-for="billing_LastName" id="forbiddensymbols_billing_LastName" data-bv-result="NOT_VALIDATED" style="display: none;">Only alphanumeric characters are allowed.</small><small class="help-block" data-bv-validator="stringLength" data-bv-for="billing_LastName" id="stringLength_billing_LastName" data-bv-result="NOT_VALIDATED" style="display: none;">The last name must not exceed 35 characters. </small><small class="help-block" data-bv-validator="notEmpty" data-bv-for="billing_LastName" id="notEmpty_billing_LastName" data-bv-result="NOT_VALIDATED" style="display: none;">Please enter a Card number</small>
-<input type="text" class="form-control " name="card" id="card" required="true" data-bv-notempty-message="Please enter a Card number" maxlength="35" data-bv-stringlength-message="The last name must not exceed 35 characters. " forbiddensymbols="" data-bv-forbiddensymbols-message="Only alphanumeric characters are allowed." data-bv-field="billing_LastName"></div>
+<input type="number" class="form-control " name="card" id="card" required="true" data-bv-notempty-message="Please enter a Card number"   data-bv-field="billing_LastName"></div>
 </div><div class="company-field  "> 
 
 <div class="form-group ">
 <label class="control-label col-sm-12" for="billing_CompanyName2">Expiry date</label>
 <div class="col-sm-12">
-<input type="text" class="form-control " name="exp" id="exp" pattern="^[a-zA-Z0-9_\.\-\s\u0027]+$" data-bv-regexp-message="Company name can only include letters, numbers, apostrophes, hyphens or full stops." maxlength="40" data-bv-stringlength-message="Field is mandatory." data-bv-field="billing_CompanyName2"></div>
+
+
+<input type="text" class="form-control" name="exp" id="exp" placeholder="mm/yy" maxlength="5" />
 </div> 
 </div>
 <div class="form-group ">
@@ -1483,7 +1485,47 @@ if(typeof(resultList) !== "undefined" && resultList !== ""){
 if(!1===gtagDataLayer.pageView){for(var i=0;i<gtagDataLayer.events.length;i++)if("page_view"===gtagDataLayer.events[i].action){_satellite.getVar("CC | GA4 Global Custom Events",{action:"page_view",params:gtagDataLayer.events[i].params}),gtagDataLayer.pageView=!0,gtagDataLayer.events.splice(i,1);break}!1===gtagDataLayer.pageView&&(_satellite.getVar("CC | GA4 Global Custom Events",{action:"page_view",params:{}}),gtagDataLayer.pageView=!0)}var triggeredEvents=[];for(i=0;i<gtagDataLayer.events.length;i++)"page_view"!==gtagDataLayer.events[i].action&&(triggeredEvents.includes(JSON.stringify(gtagDataLayer.events[i]))||(_satellite.getVar("CC | GA4 Global Custom Events",{action:gtagDataLayer.events[i].action,params:gtagDataLayer.events[i].params}),triggeredEvents.push(JSON.stringify(gtagDataLayer.events[i])),gtagDataLayer.events.splice(i,1)));
 });</script><script>_satellite["_runScript8"](function(event, target, Promise) {
 if(!1===gtagDataLayer.pageView){for(var i=0;i<gtagDataLayer.events.length;i++)if("page_view"===gtagDataLayer.events[i].action){_satellite.getVar("CC | GA4 Global Custom Events",{action:"page_view",params:gtagDataLayer.events[i].params}),gtagDataLayer.pageView=!0,gtagDataLayer.events.splice(i,1);break}!1===gtagDataLayer.pageView&&(_satellite.getVar("CC | GA4 Global Custom Events",{action:"page_view",params:{}}),gtagDataLayer.pageView=!0)}var triggeredEvents=[];for(i=0;i<gtagDataLayer.events.length;i++)"page_view"!==gtagDataLayer.events[i].action&&(triggeredEvents.includes(JSON.stringify(gtagDataLayer.events[i]))||(_satellite.getVar("CC | GA4 Global Custom Events",{action:gtagDataLayer.events[i].action,params:gtagDataLayer.events[i].params}),triggeredEvents.push(JSON.stringify(gtagDataLayer.events[i])),gtagDataLayer.events.splice(i,1)));
-});</script><iframe id="universal_pixel_0zlcwjg" height="0" width="0" style="display:none;" src="./Checkout Address_files/up.html" title="TTD Universal Pixel"></iframe></body></html>
+});</script><iframe id="universal_pixel_0zlcwjg" height="0" width="0" style="display:none;" src="./Checkout Address_files/up.html" title="TTD Universal Pixel"></iframe>
+
+
+<script>
+  document.getElementById('exp').addEventListener('input', function(e) {
+    var input = e.target.value.replace(/\D/g, ''); // Remove non-digits
+    var month = '';
+    var year = '';
+
+    // Extract month and year from input
+    if (input.length >= 2) {
+      month = input.substring(0, 2);
+      year = input.substring(2, 4);
+    } else {
+      month = input;
+    }
+
+    // Auto-insert slash after the month
+    if (input.length >= 2) {
+      e.target.value = month + '/' + year;
+    } else {
+      e.target.value = month;
+    }
+
+    // Validation for month and year
+    if (month.length == 2 && (parseInt(month) > 12 || parseInt(month) < 1)) {
+      alert('Invalid month. Please enter a month between 01 and 12.');
+      e.target.value = '';
+    }
+
+    // Ensure year starts from 24 if 2 digits are entered
+    if (year.length == 2 && parseInt(year) < 24) {
+      alert('Invalid year. Year should start from 24.');
+      e.target.value = month + '/';
+    }
+  });
+</script>
+
+</body></html>
+
+
 
 <?php
 }else {
