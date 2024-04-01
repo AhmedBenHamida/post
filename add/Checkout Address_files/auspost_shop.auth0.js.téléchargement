@@ -1,0 +1,118 @@
+var authWebService = null;
+
+var Auth0Shop = {
+};
+
+
+/*
+ * Registering all the methods on initialization.
+ */
+Auth0Shop.init = function () {
+    Auth0Shop.doAUTH0Login();
+    Auth0Shop.doAUTH0Logout();
+ }
+
+/**
+ * AUTH0 login: create form sumbit url from ajax and then user redirect to mypost site
+ */
+ Auth0Shop.doAUTH0Login = function () {     
+     $(document).on('click', '.ish-sso-login-link, .ish-sso-login-link + ap-drop-down li a, .am-login-link.am-item, a.checkout-login, .login-tile a, .login-tile button, .email-search-login-trigger', function (e) {
+      e.preventDefault();
+      if ($(e.target).hasClass('active')) {
+            return false;
+        }
+        if ($(this).closest('.login-tile').length > 0) {
+            $('.loading-block').removeClass('hidden');
+        }
+		var RelayState = null;
+        $(e.target).addClass('active');
+        if ($(this).hasClass('checkout-login') || $(this).data('useHref')) {
+           RelayState = $(this).attr('href');
+        } else {
+        	RelayState = window.location.href;
+        	if($(this).hasClass('am-login-link') || $(this).hasClass('am-login-signup-link')){
+                if(RelayState.indexOf('ViewCheckoutConfirmation')>0){
+                    RelayState=RelayState.replace('ViewCheckoutConfirmation','ViewHomepage').split('&')[0]; 
+                }   
+               }
+               if($(this).hasClass('email-search-login-trigger')){
+                   if(RelayState.indexOf('?')>0){
+                       RelayState = RelayState+'&LinkOldOrders=true'; 
+                   }else{
+                       RelayState = RelayState+'?LinkOldOrders=true';
+                   }
+               }
+        }
+	    Auth0Shop.doAUTH0LoginAsync(RelayState);   
+    });
+    if ($('.ish-sso-login-init').length > 0) {
+        $('.loading-block').removeClass('hidden');
+        $('.ish-sso-login-init').trigger('click');
+    }
+};
+
+Auth0Shop.doAUTH0LoginAsync = async function (RelayState) {
+
+	try{
+		if(RelayState !== ''){
+		 	sessionStorage.setItem("Auth0RelayState", RelayState);
+		}
+		var isAuthenticated = await authWebService.isAuthenticated();
+		if(!isAuthenticated){
+			authWebService.login(auth0config);
+		}else{
+			 window.location.href= auth0config.redirectUrl;
+		}
+	}catch(ex){
+	}
+};
+
+
+/**
+ * AUTH0 Logout: if user have something in cart then show confirmation modal otherwise logout user
+ */
+Auth0Shop.doAUTH0Logout = function () {
+	setTimeout(function () {
+        $(document).on('click', '.ish-sso-logout-link, #mypost-logout-link-desktop, #mypost-logout-link-sidebar', function (e) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            if($(this).closest('.logout-section').length > 0){
+                logOutUser();
+                return false;
+            }
+            if (($('.quick-cart-link .cart-count:visible').length > 0) && ($(window).width() > 679)) {
+                if (ishconfig.samlLogout != 'false') {
+                    if ($(window).width() < 970) {
+                        $('.sidebar-close-icon').trigger('click');
+                    }
+                    $('#LogoutConfirmationModal').appendTo('body').modal('show');
+                } else {
+                    logOutUser();
+                }
+            } else {
+                logOutUser();
+            }
+        });
+
+    }, 2000);
+};
+
+/** 
+ * Logout user
+ * @returns
+ */
+function logOutUser() {
+		var RelayState = window.location.href
+   		sessionStorage.setItem("Auth0RelayState", RelayState);
+		authWebService.logout(auth0LoutOutURL);
+}
+
+$(document).ready(function () {
+	authWebService = window.__AUSPOST__.createAuthWebService();
+	Auth0Shop.init();
+});
+
+
+$(document).ready(async function () {
+	await authWebService.initialise(auth0config);
+});;

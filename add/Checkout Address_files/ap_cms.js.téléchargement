@@ -1,0 +1,16 @@
+$(document).ready(function () {
+	if(($('#ws-cart').length > 0) && ($(window).width() < 680)){
+		$.each($('.mobile-edit-preview-links'), function(idx, obj){
+			if($(obj).find('.brandwrapped-product-preview-trigger').data('local-basket-id') !== ''){
+				$(obj).removeClass('hidden');
+			}else{
+				$(obj).addClass('hidden');
+			}
+		});
+	}
+	if(($('#ws-product').length > 0)){
+		if($('.product-info input.input-quantity').attr('data-show-total-price') !== undefined) {
+			updateTotalProductPrice(parseInt($('.product-info input.input-quantity').val()));
+		}
+	}
+});

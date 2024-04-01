@@ -1,0 +1,59 @@
+// JavaScript Document
+
+	
+	/* Global definition */
+
+    var g_url = document.location.href.toLowerCase();
+
+	if(typeof(canonicalLink) !== 'undefined'){
+		var g_url = canonicalLink.toLowerCase();
+	}
+	else{
+		var g_url = document.location.href.toLowerCase();
+	}
+	
+	var g_pageName = "auspost:shop";
+	var g_SBU = "eservices";
+
+	/* Define pageName */
+	
+	// decodes any encoded string
+	g_url = unescape(g_url).replace(/^\s\s*/, "").replace(/\s\s*$/, "");
+
+	// remove http:// or https://
+	if(window.parent.document.location.protocol == "https:")
+		g_url = g_url.slice(8);
+	else
+		g_url = g_url.slice(7);
+
+	/* Added on 2011-08-17 */
+	if(g_url.search("cmpid") > 0)
+		g_url = g_url.replace(/\?cmpid.*/, "");
+		
+	// build file name when none exists or equals to index.html  
+	var url_array = g_url.split("/");
+		
+	if(url_array[url_array.length - 1] == "" || url_array[url_array.length - 1] == "index.html"){
+		g_pageName = g_pageName;
+	}
+	else{
+		for(var i = 1; i < url_array.length; i=i+1){
+			g_pageName = g_pageName + ":" + url_array[i];
+		}
+	}
+	
+	// remove campaign id and internal tracking id in the page name
+	if(g_pageName.search("cmpid") > 0)
+		g_pageName = g_pageName.replace(/\?cmpid.*/, "");
+
+	if(g_pageName.search("ilink") > 0)
+		g_pageName = g_pageName.replace(/\?ilink.*/, "");
+	
+	if(g_pageName.search("icid") > 0)
+		g_pageName = g_pageName.replace(/\?icid.*/, "");
+	
+	// remove any file extensions
+	var pageName_array = g_pageName.split(".");		
+	g_pageName = pageName_array[0];
+	
+	

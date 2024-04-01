@@ -1,0 +1,1715 @@
+var intershop = intershop || {};
+(function (ish) {
+    ish.utils = {};
+    ish.utils.Exceptions = {};
+    ish.utils.URLHelper = {
+        isURL: function (str) {
+            try {
+                new URL(str);
+                return true;
+            } catch (_) {
+                return false;
+            }
+        }
+    }
+    ish.utils.Namespace = function (path, scope) {
+        var parts = path.split('.'),
+            last = scope || window,
+            current;
+
+        while (parts.length > 0) {
+            current = parts.shift();
+            last = last[current] = last[current] || {};
+        }
+
+        return last;
+    }
+    ish.utils.StringFormat = function (source, params) {
+        params.forEach(function (param, index) {
+            source = source.replace(new RegExp("\\{" + index + "\\}", "g"), param);
+        });
+        return source;
+    }
+    ish.utils.LocalizedStringFormat = function (source, localizationService) {
+        var regEx = new RegExp("\\{(?!\\d)(.*?)\\}");
+        var result;
+        while ((result = regEx.exec(source)) !== null) {
+            var key = source.substr(result.index + 1, result[0].length - 2);
+            var value = localizationService.getKey(key);
+            source = source.substring(0, result.index).concat(value, source.substring(result.index + result[0].length));
+        }
+        return source;
+    }
+    ish.utils.ParameterizedStringFormat = function (source, parametersMap) {
+        // TODO:  Below failes in Safari < 16.4
+        /* 
+        //var regEx = new RegExp("\\{(?!\\d)(.*?)\\}");
+        var regEx = new RegExp(/(?<!\{)\{(?!\{)(?!\d)(.*?)(?<!\})\}(?!\})/);
+
+        var result;
+        while ((result = regEx.exec(source)) !== null) {
+            var key = source.substr(result.index + 1, result[0].length - 2);
+            if (parametersMap.has(key)) {
+                var value = parametersMap.get(key)
+                source = source.substring(0, result.index).concat(value, source.substring(result.index + result[0].length));
+            }
+            else {
+                console.log(source);
+                source = source.replace(new RegExp('{' + key + '}', 'g'), '');
+            }
+        }
+        return source;
+        */
+
+        var position = 0;
+
+        while (position < source.length - 1) {
+            const start = source.indexOf('{', position);
+            if (start == -1){
+                position = source.length;
+                continue;
+            }
+            if (start != -1 && !source.substr(start + 1, 1) != '{' && !source.substr(start + 1, 1).match(/\d/)) {
+                const end = source.indexOf('}', start);
+                key = source.substring(start + 1, end);
+                position = end - 1;
+
+                if (parametersMap.has(key)) {
+                    var value = parametersMap.get(key)
+                    source = source.substring(0, start).concat(value, source.substring(end + 1));
+                }
+                else {
+                    source = source.replace(new RegExp('{' + key + '}', 'g'), '');
+                    position = 0;
+                }
+            }
+            else
+                position = start + 1;
+        }
+        return source;
+    }
+    ish.utils.getElementsByXPath = function (node, xPathExpression) {
+        const results = document.evaluate(xPathExpression, node, null, XPathResult.ANY_TYPE, null)
+        var next = results.iterateNext();
+        var foundNodes = new Array();
+
+        while (next) {
+            foundNodes.push(next);
+            next = results.iterateNext();
+        }
+        return foundNodes;
+    }
+    ish.utils.UUID = function () {
+        return 'Axxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            var r = Math.random() * 16 | 0,
+                v = c == 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+    ish.utils.createElementFromHTML = function (html) {
+        var div = document.createElement('div');
+        div.innerHTML = html.trim();
+        return div.firstChild;
+    }
+    ish.utils.Image = function (str) {
+        if (!str) {
+            return Promise.resolve(null);
+        }
+        return new Promise(function (resolve, reject) {
+            var image = new Image();
+            image.onload = function () {
+                resolve(image);
+            }
+            image.onerror = function () {
+                console.trace();
+                reject();
+            }
+            image.src = str;
+        });
+    }
+    ish.utils.SVGParser = function (str) {
+        var parser = new DOMParser(),
+            doc = null;
+        try {
+            doc = parser.parseFromString(str, 'image/svg+xml');
+        } catch (e) {
+            console.log('SVGParser Exception: ' + e);
+        }
+        return doc;
+    }
+    ish.utils.DOMSerializer = function (doc) {
+        var serializer = new XMLSerializer();
+        return serializer.serializeToString(doc);
+    }
+    ish.utils.fetchFile = function (str) {
+        return fetch(str)
+            .then(function (resp) {
+                return Promise.resolve(resp.text());
+            });
+    }
+    ish.utils.DispatchEvent = function (type, detail, node) {
+        var event;
+        if (detail)
+            event = new CustomEvent(type, {
+                detail: detail
+            });
+        else
+            event = new CustomEvent(type);
+        if (node)
+            node.dispatchEvent(event);
+        else
+            document.dispatchEvent(event);
+
+        return event;
+    }
+    ish.utils.getBrowserType = function () {
+        // Opera 8.0+
+        var isOpera = (!!window.opr && !!opr.addons) || !!window.opera || navigator.userAgent.indexOf(' OPR/') >= 0;
+        if (isOpera) return 'Opera';
+
+        // Firefox 1.0+
+        var isFirefox = typeof InstallTrigger !== 'undefined';
+        if (isFirefox) return 'Firefox';
+
+        // Safari 3.0+ "[object HTMLElementConstructor]" 
+        var isSafari = /constructor/i.test(window.HTMLElement) || (function (p) {
+            return p.toString() === "[object SafariRemoteNotification]";
+        })(!window['safari'] || (typeof safari !== 'undefined' && safari.pushNotification));
+        if (isSafari) return 'Safari';
+
+        var isiOS = [
+            'iPad Simulator',
+            'iPhone Simulator',
+            'iPod Simulator',
+            'iPad',
+            'iPhone',
+            'iPod'
+        ].includes(navigator.platform);
+        if (isiOS) return 'iOS';
+
+        // Internet Explorer 6-11
+        var isIE = !!document.documentMode;
+        if (isIE) return 'IE';
+
+        // Edge 20+
+        var isEdge = !isIE && !!window.StyleMedia;
+        if (isEdge) return 'Edge';
+
+        // Chrome 1 - 79
+        var isChrome = !!window.chrome && (!!window.chrome.webstore || !!window.chrome.runtime);
+        if (isChrome) return 'Chrome';
+
+        // Edge (based on chromium) detection
+        var isEdgeChromium = isChrome && (navigator.userAgent.indexOf("Edg") != -1);
+        if (isEdgeChromium) return 'EdgeChromium';
+        // Blink engine detection
+        var isBlink = (isChrome || isOpera) && !!window.CSS;
+        if (isBlink) return 'Blink';
+    }
+    ish.utils.getBrowserInfo = function () {
+        var nVer = navigator.appVersion;
+        var nAgt = navigator.userAgent;
+        var browserName = navigator.appName;
+        var fullVersion = '' + parseFloat(navigator.appVersion);
+        var majorVersion = parseInt(navigator.appVersion, 10);
+        var nameOffset, verOffset, ix;
+
+        // In Opera, the true version is after "Opera" or after "Version"
+        if ((verOffset = nAgt.indexOf("Opera")) != -1) {
+            browserName = "Opera";
+            fullVersion = nAgt.substring(verOffset + 6);
+            if ((verOffset = nAgt.indexOf("Version")) != -1)
+                fullVersion = nAgt.substring(verOffset + 8);
+        }
+        // In MSIE, the true version is after "MSIE" in userAgent
+        else if ((verOffset = nAgt.indexOf("MSIE")) != -1) {
+            browserName = "Microsoft Internet Explorer";
+            fullVersion = nAgt.substring(verOffset + 5);
+        }
+        // In Chrome, the true version is after "Chrome" 
+        else if ((verOffset = nAgt.indexOf("Chrome")) != -1) {
+            browserName = "Chrome";
+            fullVersion = nAgt.substring(verOffset + 7);
+        }
+        // In Safari, the true version is after "Safari" or after "Version" 
+        else if ((verOffset = nAgt.indexOf("Safari")) != -1) {
+            browserName = "Safari";
+            fullVersion = nAgt.substring(verOffset + 7);
+            if ((verOffset = nAgt.indexOf("Version")) != -1)
+                fullVersion = nAgt.substring(verOffset + 8);
+        }
+        // In Firefox, the true version is after "Firefox" 
+        else if ((verOffset = nAgt.indexOf("Firefox")) != -1) {
+            browserName = "Firefox";
+            fullVersion = nAgt.substring(verOffset + 8);
+        }
+        // In most other browsers, "name/version" is at the end of userAgent 
+        else if ((nameOffset = nAgt.lastIndexOf(' ') + 1) <
+            (verOffset = nAgt.lastIndexOf('/'))) {
+            browserName = nAgt.substring(nameOffset, verOffset);
+            fullVersion = nAgt.substring(verOffset + 1);
+            if (browserName.toLowerCase() == browserName.toUpperCase()) {
+                browserName = navigator.appName;
+            }
+        }
+        // trim the fullVersion string at semicolon/space if present
+        if ((ix = fullVersion.indexOf(";")) != -1)
+            fullVersion = fullVersion.substring(0, ix);
+        if ((ix = fullVersion.indexOf(" ")) != -1)
+            fullVersion = fullVersion.substring(0, ix);
+
+        majorVersion = parseInt('' + fullVersion, 10);
+        if (isNaN(majorVersion)) {
+            fullVersion = '' + parseFloat(navigator.appVersion);
+            majorVersion = parseInt(navigator.appVersion, 10);
+        }
+
+        return {
+            name: browserName,
+            version: fullVersion,
+            majorVersion: majorVersion,
+            userAgent: navigator.userAgent,
+            platform: navigator.platform,
+            appName: navigator.appName
+        }
+    }
+}(intershop));
+;(function ($, ish, ishcfg) {
+     if (typeof ish.personalized === 'undefined')
+        ish.personalized = {}
+
+    ish.personalized.utils = ish.utils || {};
+    ish.personalized.utils.ResizeEnd = function (callback) {
+        if (!callback) {
+            return false;
+        }
+
+        var rtime;
+        var timeout = false;
+        var delta = 200;
+        window.addEventListener('resize', function () {
+            rtime = new Date();
+            if (timeout === false) {
+                timeout = true;
+                setTimeout(resizeEnd, delta);
+            }
+        });
+
+        function resizeEnd() {
+            if (new Date() - rtime < delta) {
+                setTimeout(resizeEnd, delta);
+            } else {
+                timeout = false;
+                callback.call(this);
+            }
+        }
+    }
+    ish.personalized.utils.isSVGString = function (str) {
+        str = str.replace(/\s/g, '');
+        return /^<svg.*<\/svg>$/.test(str);
+    }
+    ish.personalized.utils.dpiCalculator = function (cms, dpi) {
+        return cms * (dpi / 2.54);
+    }
+    ish.personalized.utils.pixelCalculator = function (pixels, dpi) {
+        return pixels * 2.54 / dpi;
+    }
+    ish.personalized.utils.fetchSVG = function (str) {
+        var isURL = ish.personalized.utils.URLHelper.isURL;
+        var isSVGString = ish.personalized.utils.isSVGString;
+        //if (isURL(str)) {
+        if (!isSVGString(str)) {
+            return fetch(str)
+                .then(function (resp) {
+                    return Promise.resolve(resp.text());
+                });
+        } else {
+            return Promise.resolve(str);
+        }
+    }
+    ish.personalized.utils.fetchFile = function (str) {
+        return fetch(str)
+            .then(function (resp) {
+                return Promise.resolve(resp.text());
+            });
+    }
+    ish.personalized.utils.fetchFileAsJSON = function (str) {
+        return fetch(str)
+            .then(function (resp) {
+                return Promise.resolve(resp.json());
+            });
+    }
+    ish.personalized.utils.fetchFileAsBlob = function (str) {
+        return fetch(str)
+            .then(function (resp) {
+                return Promise.resolve(resp.blob());
+            });
+    }
+    ish.personalized.utils.scaleSVG = function (svg, width, height) {
+        var element = ish.personalized.utils.createElementFromHTML(svg);
+        /*var viewBox = element.getAttribute('viewBox');
+        var dims = {
+            width: viewBox.split(' ')[2],
+            height: viewBox.split(' ')[3]
+        }
+        scalex = width / dims.width;
+        scaley = height / dims.height;*/
+        //element.setAttribute('transform', 'scale('.concat(scalex, ' ', scaley, ')'));
+        element.setAttribute('class', 'svg-pstampv2 svg-personalized');
+        element.setAttribute('width', width);
+        element.setAttribute('height', height);
+        return element;
+    }
+    ish.personalized.utils.createImageFromSVG = function (svgSource, width) {
+        return new Promise(function (resolve, reject) {
+            ish.personalized.utils.SVGFontLoader.loadFonts('localized.css')
+                .then(function (style) {
+                    var styleNode = document.createElementNS("http://www.w3.org/2000/svg", "style");
+                    styleNode.type = 'text/css';
+                    styleNode.innerHTML = style;
+
+                    var svgDoc = ish.personalized.utils.SVGParser(svgSource);
+                    var svgDocOriginal = ish.personalized.utils.SVGParser(svgSource);
+                    var defs = svgDoc.documentElement.querySelector('defs');
+
+                    if (defs) {
+                        svgDoc.documentElement.querySelector('defs').append(styleNode);
+                    } else {
+                        defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+                        defs.append(styleNode)
+                        svgDoc.documentElement.prepend(defs);
+                    }
+
+                    var svgWithFontsStr = ish.personalized.utils.DOMSerializer(svgDoc);
+
+                    //create svg image on the server for Edge, IE & Firefox clients
+                    if (ish.personalized.utils.getBrowserType() == 'Safari' || ish.personalized.utils.getBrowserType() == 'iOS' || ish.personalized.utils.getBrowserType() == 'Firefox' || ish.personalized.utils.getBrowserType() == 'Edge' || ish.personalized.utils.getBrowserType() == 'IE') {
+                        var viewBox = svgDoc.documentElement.viewBox.baseVal;
+                        var aspectRatio = viewBox.width / viewBox.height;
+                        var maxDimensions = ish.personalized.utils.calcuateMaxImageDimensions(width, width / aspectRatio);
+                        return ish.RESTShop.mergeImages({
+                            "image": encodeURIComponent(ish.personalized.utils.DOMSerializer(svgDocOriginal)),
+                            "overlay": null,
+                            //"printImageBase64": blankImage.replace('data:image/png;base64,', ''),
+                            //"printOverlaybase64": svgWithFontsStr,
+                            "outputType": "image",
+                            "dimensions": {
+                                "width": maxDimensions.width,
+                                "height": maxDimensions.width / aspectRatio
+                            },
+                            "additionalPages": []
+                        })
+                            .then(function (imageBase64) {
+                                try {
+                                    var mimeType = ish.personalized.utils.getMimeTypeFromExtension(ish.personalized.utils.getBase64ImageType(imageBase64.substr(0, 20)));
+                                    resolve(b64toBlob(imageBase64, mimeType));
+                                } catch (ex) {
+                                    reject();
+                                }
+                            }.bind(this));
+                    }
+
+                    var image = new Image();
+                    image.setAttribute('src', 'data:image/svg+xml;base64,' + btoa(svgWithFontsStr));
+                    image.onload = function () {
+                        var canvas = document.createElement('canvas');
+                        var ctx = canvas.getContext('2d');
+                        var viewBox = svgDoc.documentElement.viewBox.baseVal;
+                        var aspectRatio = viewBox.width / viewBox.height;
+                        canvas.width = width;
+                        canvas.height = width / aspectRatio;
+                        ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
+                        ish.personalized.utils.createBlobFromCanvas(canvas)
+                            .then(function (blob) {
+                                delete canvas;
+                                delete image;
+                                //URL.revokeObjectURL(url)
+                                //delete url;
+                                resolve(blob);
+                            });
+                    }
+                });
+        });
+    }
+    ish.personalized.utils.calcuateMaxImageDimensions = function (targetWidth, targetHeight) {
+        var storage = window.localStorage;
+        if (!storage) {
+            console.warn('Could not determine canvas width, height on browser. Using defaults');
+            return {
+                width: targetWidth > 8192 ? 8192 : targetWidth,
+                height: targetHeight > 8192 ? 8192 : targetHeight
+            }
+        }
+        var maxCanvasWidth = JSON.parse(storage.getItem('ish-canvas-max-area')).width,
+            maxCanvasHeight = JSON.parse(storage.getItem('ish-canvas-max-area')).height,
+            scaledWidth = targetWidth,
+            scaledHeight = targetHeight,
+            maxWidth = maxCanvasWidth > 8192 ? 8192 : maxCanvasWidth,
+            maxHeight = maxCanvasHeight > 8192 ? 8192 : maxCanvasHeight;
+        if (scaledWidth > maxWidth || scaledHeight > maxHeight) {
+            var aspect = scaledWidth / scaledHeight;
+
+            if (scaledWidth > scaledHeight) {
+                scaledWidth = maxWidth;
+                scaledHeight = scaledWidth / aspect;
+            } else {
+                scaledHeight = maxHeight;
+                scaledWidth = scaledHeight * aspect;
+            }
+        }
+        return {
+            width: scaledWidth,
+            height: scaledHeight
+        }
+    }
+    ish.personalized.utils.SVGFontLoader = (function () {
+        var snippets = [];
+
+        function _loadFonts(filename) {
+            var fontsURLBase = ishcfg.webRoot.concat('/fonts/base64/');
+            return fetch(fontsURLBase.concat(filename))
+                .then(function (resp) {
+                    return resp.text();
+                })
+                .then(function (text) {
+                    snippets.push({
+                        name: filename,
+                        text: text
+                    });
+                    return text;
+                });
+        }
+
+        function _findSnippet(name) {
+            return snippets.find(function (snippet) {
+                return snippet.name == name;
+            })
+        }
+        return {
+            loadFonts: function (filename) {
+                var snippet = _findSnippet(filename);
+                if (!snippet) {
+                    return _loadFonts(filename);
+                } else {
+                    return Promise.resolve(snippet.text);
+                }
+            }
+        }
+    })();
+
+    ish.personalized.utils.createBlankPNGImage = function (width, height) {
+        var canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        return canvas.toDataURL();
+    }
+    ish.personalized.utils.ImageCompressor = function (blob, maxSize, dpi) {
+        var dpi = dpi || 72;
+        if (window.HTMLCanvasElement && window.HTMLCanvasElement.prototype.msToBlob) {
+            return changeDpiBlob(blob, dpi)
+                .then(function (result) {
+                    return Promise.resolve(blob);
+                });
+        }
+        return new Promise(function (resolve, reject) {
+            try {
+                var convertSize = maxSize ? maxSize : 5000000;
+                new Compressor(blob, {
+                    convertSize: convertSize,
+                    beforeDraw: function (context, canvas) {
+                        context.fillStyle = '#fff';
+                        context.fillRect(0, 0, canvas.width, canvas.height);
+                    },
+                    success: function (result) {
+                        changeDpiBlob(result, dpi)
+                            .then(function (result) {
+                                resolve(result);
+                            });
+                    },
+                    error: function (err) {
+                        console.log('Error compressing image: ' + err);
+                        console.log('Arguments: ');
+                        console.log(blob);
+                        console.trace();
+                        reject(ex);
+                    }
+                });
+            } catch (error) {
+                console.log('Exception compressing image: ' + error);
+                console.log('Arguments: ');
+                console.log(blob);
+                console.trace();
+                reject(error);
+            }
+        });
+    }
+    ish.personalized.utils.createBlobFromCanvas = function (canvas, type, quality) {
+        return new Promise(function (resolve, reject) {
+            if (canvas.msToBlob) {
+                //console.log('Canvas Dims - Width: ' + canvas.width + ' Height: ' + canvas.height);
+                //console.trace();
+                try {
+                    var blob = canvas.msToBlob();
+                    resolve(blob);
+                } catch (ex) {
+                    console.log('utils: Line 283 - ' + ex.toString());
+                    console.trace();
+                    reject(ex);
+                }
+            } else {
+                try {
+                    if (type && quality) {
+                        canvas.toBlob(function (blob) {
+                            resolve(blob);
+                        }, type, quality);
+                    } else {
+                        canvas.toBlob(function (blob) {
+                            resolve(blob);
+                        });
+                    }
+                } catch (ex) {
+                    console.log('utils: Line 294 - ' + ex.toString());
+                    console.trace();
+                    reject(ex);
+                }
+            }
+        });
+    }
+    ish.personalized.utils.CloneBlob = function (blob) {
+        return new Promise(function (resolve) {
+            var reader = new FileReader();
+            reader.readAsArrayBuffer(blob);
+            reader.onload = function () {
+                resolve(new Blob([reader.result], {
+                    type: blob.type
+                }));
+            }
+        });
+    }
+    ish.personalized.utils.getBase64FromBlob = function (blob, excludeMime) {
+        return new Promise(function (resolve) {
+            var reader = new FileReader();
+            reader.onload = function () {
+                if (excludeMime) {
+                    resolve(reader.result.split(',')[1]);
+                } else {
+                    resolve(reader.result);
+                }
+            }
+            reader.readAsDataURL(blob);
+        });
+    }
+    ish.personalized.utils.ImageResize = function (url, targetWidth) {
+        return new Promise(function (resolve) {
+            var canvas = document.createElement('canvas');
+            var image = new Image();
+            image.onload = function () {
+                if (!targetWidth) {
+                    targetWidth = image.width;
+                }
+                var aspectRatio = image.width / image.height;
+                canvas.width = targetWidth
+                canvas.height = targetWidth * aspectRatio;
+
+                var ctx = canvas.getContext('2d');
+                ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+                return ish.personalized.utils.createBlobFromCanvas(canvas)
+                    .then(function (blob) {
+                        delete canvas;
+                        delete image;
+                        resolve(blob);
+                    });
+            }
+            image.src = url;
+        });
+    }
+    ish.personalized.utils.ImageCrop = function (imageURL, width, height) {
+        return new Promise(function (resolve) {
+            var canvas = document.createElement('canvas'),
+                maxDimensions = ish.personalized.utils.calcuateMaxImageDimensions(width, height);
+            canvas.width = maxDimensions.width;
+            canvas.height = maxDimensions.height;
+            var image = new Image();
+            image.onload = function () {
+                var ctx = canvas.getContext('2d'),
+                    aspectRatio = maxDimensions.width / maxDimensions.height,
+                    cropWidth = (image.width - (image.width * aspectRatio)) / 2;
+                ctx.drawImage(image, cropWidth, 0, image.width - (cropWidth * 2), image.height, 0, 0, canvas.width, canvas.height)
+                //ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
+                ish.personalized.utils.createBlobFromCanvas(canvas)
+                    .then(function (blob) {
+                        delete image;
+                        canvas.width = 0;
+                        canvas.height = 0;
+                        delete canvas;
+                        resolve(blob);
+                    });
+            }
+            image.src = imageURL;
+
+        });
+    }
+    ish.personalized.utils.ImageMerge = function (image1Base64, image2Base64, targetWidth) {
+        var browserType = ish.personalized.utils.getBrowserType();
+        Promise.prototype.error = Promise.prototype['catch'];
+        return new Promise(function (resolve, reject) {
+            var canvas = document.createElement('canvas');
+            var loadedImages = 0;
+
+            var image1 = new Image();
+            image1.onload = onload;
+            image1.src = image1Base64;
+
+
+            var image2 = new Image();
+            image2.onload = onload;
+            image2.src = image2Base64;
+
+
+            function onload() {
+                loadedImages++;
+                if (loadedImages == 2) {
+                    var aspectRatio = image2.width / image2.height;
+                    var ctx = canvas.getContext('2d');
+                    if (!targetWidth) {
+                        targetWidth = image1.width > image2.width ? image1.width : image2.width;
+                    }
+                    canvas.width = targetWidth;
+                    canvas.height = targetWidth / aspectRatio;
+                    ctx.drawImage(image1, 0, 0, image1.width, image1.height, 0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(image2, 0, 0, image2.width, image2.height, 0, 0, canvas.width, canvas.height);
+                    ish.personalized.utils.createBlobFromCanvas(canvas)
+                        .then(function (blob) {
+                            canvas.width = 0;
+                            canvas.height = 0;
+                            delete canvas;
+                            delete image1;
+                            delete image2;
+                            resolve(blob);
+                        })
+                        .error(function () {
+                            console.trace();
+                            reject(blob);
+                        });
+                }
+            }
+        });
+    }
+    ish.personalized.utils.getBase64MetaData = function (base64) {
+        const meta = base64.split(',')[0];
+        const mime = meta.split(':')[1].split(';')[0];
+        const encoding = meta.split(';')[1];
+        return {
+            mime: mime,
+            encoding: encoding,
+            dataIndex: meta.length + 1
+        }
+    }
+    ish.personalized.utils.convertBlobToBase64 = function (blob) {
+        const fileReader = new FileReader();
+        fileReader.readAsDataURL(blob);
+        return new Promise(function (resolve, reject) {
+            fileReader.onload = function () { resolve(fileReader.result) };
+            fileReader.onerror = function (error) { reject(error) };
+        });
+    }
+    ish.personalized.utils.convertBase64ToBlobFetch = function (base64) {
+        return fetch(base64)
+            .then(function (resp) {
+                return resp.blob();
+            });
+    }
+    ish.personalized.utils.convertBase64ToBlob = function (b64Data, contentType, sliceSize) {
+        contentType = contentType || '';
+        sliceSize = sliceSize || 512;
+
+        var byteCharacters = atob(b64Data);
+        var byteArrays = [];
+
+        for (var offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+            var slice = byteCharacters.slice(offset, offset + sliceSize);
+
+            var byteNumbers = new Array(slice.length);
+            for (var i = 0; i < slice.length; i++) {
+                byteNumbers[i] = slice.charCodeAt(i);
+            }
+
+            var byteArray = new Uint8Array(byteNumbers);
+
+            byteArrays.push(byteArray);
+        }
+
+        var blob = new Blob(byteArrays, {
+            type: contentType
+        });
+        return blob;
+    }
+    ish.personalized.utils.getBase64ImageType = function (base64) {
+        var signatures = {
+            'JVBERi0': 'pdf',
+            'R0lGOD': "gif",
+            'Qk0=': 'bmp',
+            'iVBORw0KGgo': 'png',
+            '/9j/2w==': 'jpg',
+            '/9j/4AAQSkZJRgAB': 'jpg',
+            '/9j/7g==': 'jpg'
+        };
+
+        for (var s in signatures) {
+            if (base64.indexOf(s) === 0) {
+                return signatures[s];
+            }
+        }
+    }
+    ish.personalized.utils.getMimeTypeFromExtension = function (extension) {
+        var signatures = {
+            'png': 'image/png',
+            'jpg': 'image/jpeg'
+        };
+        for (var s in signatures) {
+            if (extension.indexOf(s) === 0) {
+                return signatures[s];
+            }
+        }
+    }
+    ish.personalized.utils.getExtensionFromMimeType = function (mime) {
+        var signatures = {
+            'application/pdf': 'pdf',
+            'image/gif': "gif",
+            'image/bmp': 'bmp',
+            'image/x-windows-bmp': 'bmp',
+            'image/png': 'png',
+            'image/jpeg': 'jpg'
+        };
+
+        for (var s in signatures) {
+            if (mime.indexOf(s) === 0) {
+                return signatures[s];
+            }
+        }
+    }
+    ish.personalized.utils.getBrowserMaxCanvasSize = function (browserType) {
+        switch (browserType) {
+            case 'Firefox':
+            case 'Chrome':
+            case 'EdgeChromium':
+                return {
+                    width: 32767,
+                    height: 32767,
+                    area: 268435456
+                }
+                break;
+            case 'Safari':
+                return {
+                    width: 4194303,
+                    height: 8388607,
+                    area: 16777216
+                }
+                break;
+            case 'Edge':
+                return {
+                    width: 16384,
+                    height: 16384,
+                    area: 268435456
+                }
+                break;
+            case 'IE':
+            default:
+                return {
+                    width: 8192,
+                    height: 8192,
+                    area: 67108864
+                }
+                break;
+        }
+    }
+}(jQuery, intershop, ishconfig));;/*
+ * @author https://twitter.com/blurspline / https://github.com/zz85
+ * See post @ http://www.lab4games.net/zz85/blog/2014/11/15/resizing-moving-snapping-windows-with-js-css/
+ */
+(function ($, ish, ishcfg) {
+  ish.personalized.utils.UI = {};
+
+  var Utils = ish.personalized.utils;
+
+  ish.personalized.utils.UI.Draggable = function (draggable, ghostPane, excludes) {
+    this.minWidth = 60;
+    this.minHeight = 40;
+
+    // Thresholds
+    this.FULLSCREEN_MARGINS = -10;
+    this.MARGINS = 4;
+
+    // End of what's configurable.
+    this.clicked = null;
+    this.onRightEdge;
+    this.onBottomEdge;
+    this.onLeftEdge;
+    this.onTopEdge;
+
+    this.rightScreenEdge;
+    this.bottomScreenEdge;
+
+    this.preSnapped;
+
+    this.b;
+    this.x;
+    this.y;
+    this.mouseX;
+    this.mouseY;
+
+    this.redraw = false;
+
+    if (!draggable.classList.contains('draggable')) {
+      draggable.classList.add('draggable');
+    }
+    this.pane = draggable;
+    if (!ghostPane) {
+      ghostPane = Utils.createElementFromHTML('<div class="ghostpanel"></div>');
+      this.pane.parentNode.insertBefore(ghostPane, this.pane.nextSibling);
+    }
+    this.ghostpane = ghostPane;
+    this.excludes = excludes;
+
+    for (const exclude of this.excludes) {
+      var node = this.pane.querySelector(exclude);
+      node.dataset.draggabeExclude = true;
+    }
+
+    this.e;
+
+
+    //this.animate();
+
+
+
+  };
+  ish.personalized.utils.UI.Draggable.prototype = {
+    onResizeEnd: function () {
+      return true;
+
+    },
+    onMoveEnd: function () {
+      return true;
+    },
+    detach: function () {
+      this.paneOriginalStyle = this.pane.style.cssText;
+      //this.ghostpane.style.cssText = '';
+      this.pane.classList.add('detached');
+      this.ghostpane.classList.add('detached');
+
+      this.pane.addEventListener('mousedown', this.onMouseDown.bind(this));
+      document.addEventListener('mousemove', this.onMove.bind(this));
+      document.addEventListener('mouseup', this.onUp.bind(this));
+      // Touch events	
+      this.pane.addEventListener('touchstart', this.onTouchDown.bind(this));
+      document.addEventListener('touchmove', this.onTouchMove.bind(this));
+      document.addEventListener('touchend', this.onTouchEnd.bind(this));
+      this.animate();
+    },
+    attach: function () {
+      this.pane.removeEventListener('mousedown', this.onMouseDown);
+      document.removeEventListener('mousemove', this.onMove);
+      document.removeEventListener('mouseup', this.onUp);
+
+      // Touch events	
+      this.pane.removeEventListener('touchstart', this.onTouchDown);
+      document.removeEventListener('touchmove', this.onTouchMove);
+      document.removeEventListener('touchend', this.onTouchEnd);
+      this.stopAnimation();
+
+      this.pane.classList.remove('detached');
+      this.ghostpane.classList.remove('detached');
+      this.pane.style.cssText = this.paneOriginalStyle;
+      //this.ghostpane.style.cssText = '';
+    },
+    onTouchDown: function (e) {
+      onDown(e.touches[0]);
+      e.preventDefault();
+    },
+    onTouchMove: function (e) {
+      onMove(e.touches[0]);
+    },
+    onTouchEnd: function (e) {
+      if (e.touches.length == 0) onUp(e.changedTouches[0]);
+    },
+    onMouseDown: function (e) {
+      var target = e.target;
+      if (target.dataset && target.dataset.draggabeExclude) {
+        console.log('default prevented');
+        return;
+      }
+      this.onDown(e);
+      e.preventDefault();
+    },
+    onDown: function (e) {
+      this.calc(e);
+
+      this.isResizing = this.onRightEdge || this.onBottomEdge || this.onTopEdge || this.onLeftEdge;
+
+      this.clicked = {
+        x: this.x,
+        y: this.y,
+        cx: e.clientX,
+        cy: e.clientY,
+        w: this.b.width,
+        h: this.b.height,
+        isResizing: this.isResizing,
+        isMoving: !this.isResizing && this.canMove(),
+        onTopEdge: this.onTopEdge,
+        onLeftEdge: this.onLeftEdge,
+        onRightEdge: this.onRightEdge,
+        onBottomEdge: this.onBottomEdge
+      };
+    },
+    canMove: function () {
+      var node = document.elementFromPoint(this.mouseX, this.mouseY);
+      if (node.dataset && node.dataset.draggabeExclude) {
+        return false;
+      }
+      return this.x > 0 && this.x < this.b.width && this.y > 0 && this.y < this.b.height;
+    },
+    onMove: function (ee) {
+      this.calc(ee);
+
+      this.e = ee;
+
+      this.redraw = true;
+
+    },
+    onUp: function (e) {
+      this.calc(e);
+
+      if (this.clicked && this.clicked.isMoving) {
+        // Snap
+        var snapped = {
+          width: this.b.width,
+          height: this.b.height
+        };
+
+        if (this.b.top < this.FULLSCREEN_MARGINS || this.b.left < this.FULLSCREEN_MARGINS || this.b.right > window.innerWidth - this.FULLSCREEN_MARGINS || this.b.bottom > window.innerHeight - this.FULLSCREEN_MARGINS) {
+          // hintFull();
+          this.setBounds(this.pane, 0, 0, window.innerWidth, window.innerHeight);
+          this.preSnapped = snapped;
+        } else if (this.b.top < this.MARGINS) {
+          // hintTop();
+          this.setBounds(this.pane, 0, 0, window.innerWidth, window.innerHeight / 2);
+          this.preSnapped = snapped;
+        } else if (this.b.left < this.MARGINS) {
+          // hintLeft();
+          this.setBounds(this.pane, 0, 0, window.innerWidth / 2, window.innerHeight);
+          this.preSnapped = snapped;
+        } else if (this.b.right > this.rightScreenEdge) {
+          // hintRight();
+          this.setBounds(this.pane, window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
+          this.preSnapped = snapped;
+        } else if (this.b.bottom > this.bottomScreenEdge) {
+          // hintBottom();
+          this.setBounds(this.pane, 0, window.innerHeight / 2, window.innerWidth, window.innerWidth / 2);
+          this.preSnapped = snapped;
+        } else {
+          this.preSnapped = null;
+        }
+        this.preSnapped = null;
+
+        this.hintHide();
+        this.onMoveEnd.call(this, e);
+      }
+
+      if (this.clicked && this.clicked.isResizing) {
+        this.onResizeEnd.call(this, e);
+      }
+      this.clicked = null;
+
+    },
+    calc: function (e) {
+      this.b = this.pane.getBoundingClientRect();
+      this.x = e.clientX - this.b.left;
+      this.y = e.clientY - this.b.top;
+      this.mouseX = e.clientX;
+      this.mouseY = e.clientY
+
+      this.onTopEdge = this.y < this.MARGINS;
+      this.onLeftEdge = this.x < this.MARGINS;
+      this.onRightEdge = this.x >= this.b.width - this.MARGINS;
+      this.onBottomEdge = this.y >= this.b.height - this.MARGINS;
+
+      this.rightScreenEdge = window.innerWidth - this.MARGINS;
+      this.bottomScreenEdge = window.innerHeight - this.MARGINS;
+    },
+    setBounds: function (element, x, y, w, h) {
+      element.style.left = x + 'px';
+      element.style.top = y + 'px';
+      element.style.width = w + 'px';
+      element.style.height = h + 'px';
+    },
+    hintHide: function () {
+      this.setBounds(this.ghostpane, this.b.left, this.b.top, this.b.width, this.b.height);
+      this.ghostpane.style.opacity = 0;
+
+      // var b = ghostpane.getBoundingClientRect();
+      // ghostpane.style.top = b.top + b.height / 2;
+      // ghostpane.style.left = b.left + b.width / 2;
+      // ghostpane.style.width = 0;
+      // ghostpane.style.height = 0;
+    },
+    animate: function () {
+      try {
+        this.animationFrame = requestAnimationFrame(this.animate.bind(this));
+      }
+      catch (ex) {
+        console.trace();
+      }
+
+      if (!this.redraw) return;
+
+      this.redraw = false;
+
+      if (this.clicked && this.clicked.isResizing) {
+        if (this.clicked.onRightEdge) this.pane.style.width = Math.max(this.x, this.minWidth) + 'px';
+        if (this.clicked.onBottomEdge) this.pane.style.height = Math.max(this.y, this.minHeight) + 'px';
+
+        if (this.clicked.onLeftEdge) {
+          var currentWidth = Math.max(this.clicked.cx - e.clientX + clicked.w, this.minWidth);
+          if (currentWidth > this.minWidth) {
+            this.pane.style.width = currentWidth + 'px';
+            this.pane.style.left = e.clientX + 'px';
+          }
+        }
+
+        if (this.clicked.onTopEdge) {
+          var currentHeight = Math.max(this.clicked.cy - e.clientY + this.clicked.h, this.minHeight);
+          if (currentHeight > this.minHeight) {
+            this.pane.style.height = currentHeight + 'px';
+            this.pane.style.top = e.clientY + 'px';
+          }
+        }
+
+        this.hintHide();
+        return;
+      }
+
+      if (this.clicked && this.clicked.isMoving) {
+
+        if (this.b.top < this.FULLSCREEN_MARGINS || this.b.left < this.FULLSCREEN_MARGINS || this.b.right > window.innerWidth - this.FULLSCREEN_MARGINS || this.b.bottom > window.innerHeight - this.FULLSCREEN_MARGINS) {
+          // hintFull();
+          this.setBounds(this.ghostpane, 0, 0, window.innerWidth, window.innerHeight);
+          this.ghostpane.style.opacity = 0.2;
+        } else if (this.b.top < this.MARGINS) {
+          // hintTop();
+          this.setBounds(this.ghostpane, 0, 0, window.innerWidth, window.innerHeight / 2);
+          this.ghostpane.style.opacity = 0.2;
+        } else if (this.b.left < this.MARGINS) {
+          // hintLeft();
+          this.setBounds(this.ghostpane, 0, 0, window.innerWidth / 2, window.innerHeight);
+          this.ghostpane.style.opacity = 0.2;
+        } else if (this.b.right > this.rightScreenEdge) {
+          // hintRight();
+          this.setBounds(this.ghostpane, window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
+          this.ghostpane.style.opacity = 0.2;
+        } else if (this.b.bottom > this.bottomScreenEdge) {
+          // hintBottom();
+          this.setBounds(this.ghostpane, 0, window.innerHeight / 2, window.innerWidth, window.innerWidth / 2);
+          this.ghostpane.style.opacity = 0.2;
+        } else {
+          this.hintHide();
+        }
+
+        if (this.preSnapped) {
+          this.setBounds(this.pane,
+            e.clientX - this.preSnapped.width / 2,
+            e.clientY - Math.min(this.clicked.y, this.preSnapped.height),
+            this.preSnapped.width,
+            this.preSnapped.height
+          );
+          return;
+        }
+
+        // moving
+        this.pane.style.top = (this.e.clientY - this.clicked.y) + 'px';
+        this.pane.style.left = (this.e.clientX - this.clicked.x) + 'px';
+
+        return;
+      }
+
+      // This code executes when mouse moves without clicking
+
+      // style cursor
+      /*
+      if (this.onRightEdge && this.onBottomEdge || this.onLeftEdge && this.onTopEdge) {
+        this.pane.style.cursor = 'nwse-resize';
+      } else if (this.onRightEdge && this.onTopEdge || this.onBottomEdge && this.onLeftEdge) {
+        this.pane.style.cursor = 'nesw-resize';
+      } else if (this.onRightEdge || this.onLeftEdge) {
+        this.pane.style.cursor = 'ew-resize';
+      } else if (this.onBottomEdge || this.onTopEdge) {
+        this.pane.style.cursor = 'ns-resize';
+      }*/ if (this.canMove()) {
+        this.pane.style.cursor = 'move';
+      } else {
+        this.pane.style.cursor = 'default';
+      }
+    },
+    stopAnimation: function () {
+      cancelAnimationFrame(this.animationFrame);
+      this.redraw = false;
+      //this.ghostpane.style.cssText = '';
+    }
+  }
+  ish.personalized.utils.UI.Modal = function (content) {
+    this.content = content;
+    this.uuid = Utils.UUID();
+    this.contentElement = null;
+    this.handlers = new Object();
+  }
+  ish.personalized.utils.UI.Modal.prototype = {
+    build: function () {
+      var wrapper = Utils.StringFormat(this.constants.templates.wrapper, [this.uuid]),
+        wrapper = Utils.createElementFromHTML(wrapper),
+        insertPlaceholder = wrapper.querySelector(this.constants.contentInsertPlaceholder);
+
+      this.contentElement = Utils.createElementFromHTML(this.content);
+      insertPlaceholder.append(this.contentElement);
+      this.contentElement = wrapper;
+      this.dialogContent = wrapper.querySelector('.dialog-content');
+      this.onHandle('build', [this]);
+    },
+    bind: function () {
+      const dataActionTriggers = this.contentElement.querySelectorAll(this.constants.dataActionTrigger);
+      for (const dataActionTrigger of dataActionTriggers) {
+        dataActionTrigger.addEventListener('click', this.onDataAction.bind(this));
+      }
+      const closeTriggers = this.contentElement.querySelectorAll(this.constants.closeTrigger);
+      for (let closeTrigger of closeTriggers) {
+        closeTrigger.addEventListener('click', this.onClose.bind(this));
+      }
+      const submitTriggers = this.contentElement.querySelectorAll(this.constants.submitTrigger);
+      for (let submitTrigger of submitTriggers) {
+        submitTrigger.addEventListener('click', this.onSubmit.bind(this));
+      }
+
+      const formSubmitTriggers = this.contentElement.querySelectorAll(this.constants.formSubmitTrigger);
+      for (let formSubmitTrigger of formSubmitTriggers) {
+        formSubmitTrigger.addEventListener('submit', this.onFormSubmit.bind(this));
+      }
+
+      const formValidations = this.contentElement.querySelectorAll(this.constants.formValidationSelector);
+      for (let formValidation of formValidations) {
+        //Validation.bind(formValidation);
+        const validator = $(formValidation)
+        .on('init.form.bv', function(e, data){
+          this.onHandle('init.form.bv', [e ,data]);
+        }.bind(this))
+        .on('init.field.bv', function(e, data){
+          this.onHandle('init.field.bv', [e ,data]);
+        }.bind(this))
+        .bootstrapValidator({
+            feedbackIcons: {
+                valid: null,
+                invalid: null,
+                validating: null
+            }
+        })
+        //form events
+        .on('error.form.bv', function(e){
+          this.onHandle('error.form.bv', [e, validator.data('bootstrapValidator')]);
+        }.bind(this))
+        .on('success.form.bv', function(e){
+          this.onHandle('success.form.bv', [e, validator.data('bootstrapValidator')]);
+        }.bind(this))
+        .on('added.field.bv', function(e, data){
+          this.onHandle('added.fiedl.bv', [e ,data]);
+        })
+        .on('removed.field.bv', function(e, data){
+          this.onHandle('removed.fiedl.bv', [e ,data]);
+        })
+        //field events
+        .on('error.field.bv', function(e, data) {
+          this.onHandle('error.field.bv', [e ,data]);
+        }.bind(this))
+        .on('success.field.bv', function(e, data) {
+          this.onHandle('success.field.bv', [e ,data]);
+        }.bind(this))
+        .on('status.field.bv', (e, data) => {
+          this.onHandle('status.field.bv', [e ,data]);
+        })
+        //validator events
+        .on('error.validator.bv', function(e, data) {
+          this.onHandle('error.validator.bv', [e ,data]);
+        }.bind(this))
+        .on('success.validator.bv', function(e, data) {
+          this.onHandle('success.validator.bv', [e ,data]);
+        }.bind(this));
+      }
+
+      const charLimitTriggers = this.contentElement.querySelectorAll(this.constants.charLimitTrigger);
+      for (const charLimitTrigger of charLimitTriggers) {
+        const targetNode = this.contentElement.querySelector('input[name="'.concat(charLimitTrigger.dataset.formInput, '"]'));
+        if (targetNode && targetNode.getAttribute('maxlength') && charLimitTrigger.querySelector('.char-value')) {
+          const maxLength = targetNode.getAttribute('maxlength');
+          const updateField = charLimitTrigger.querySelector('.char-value');
+          updateField.textContent = parseInt(maxLength, 10) - parseInt(targetNode.value.length, 10);
+          targetNode.addEventListener('keyup', function () {
+            if (document.querySelector('#project-name-form.server-error')) {
+              document.querySelector('#duplicate_project-name').classList.add('hidden');
+              document.querySelector('#project-name-form').classList.remove('server-error');
+            }
+            const maxLength = targetNode.getAttribute('maxlength');
+            const updateField = charLimitTrigger.querySelector('.char-value');
+            const formValueLength = targetNode.value.length;
+            updateField.textContent = parseInt(maxLength, 10) - parseInt(formValueLength, 10);
+          }.bind(this));
+        }
+      }
+    },
+    getElement: function (selector) {
+      if (!this.contentElement) {
+        this.build();
+        this.bind();
+      }
+      return this.contentElement.querySelector(selector);
+    },
+    show: function () {
+      if (!this.contentElement) {
+        this.build();
+        this.bind();
+      }
+      if (!document.querySelector('#'.concat(this.uuid))) {
+        document.body.append(this.contentElement);
+      }
+      document.body.classList.add('modal-open');
+      this.contentElement.classList.add('active');
+      setTimeout(function(){
+        this.contentElement.classList.add('in');
+        //this.contentElement.classList.remove('active');
+      }.bind(this), 150);
+      this.onHandle('show', [this]);
+    },
+    addClass: function (className, selector) {
+      if (!this.contentElement) {
+        this.build();
+        this.bind();
+      }
+      if (selector) {
+        let element = this.contentElement.querySelector(selector);
+        if (!element) {
+          console.error(`utils.ui.Modal: Could not find element with selector ${selector} in ${this.contentElement}`);
+          throw new Error(`utils.ui.Modal: Could not find element with selector ${selector} in ${this.contentElement}`);
+        }
+        element.classList.add(className);
+      }
+      else
+        this.contentElement.classList.add(className);
+    },
+    removeClass: function (className, selector) {
+      if (!this.contentElement) {
+        this.build();
+        this.bind();
+      }
+      if (selector) {
+        let element = this.contentElement.querySelector(selector);
+        if (!element) {
+          console.error(`utils.ui.Modal: Could not find element with selector ${selector} in ${this.contentElement}`);
+          throw new Error(`utils.ui.Modal: Could not find element with selector ${selector} in ${this.contentElement}`);
+        }
+        element.classList.remove(className);
+      }
+      else
+        this.contentElement.classList.remove(className);
+    },
+    hide: function () {
+      document.body.classList.remove('modal-open');
+      this.contentElement.classList.remove('in');
+      setTimeout(function(){
+        this.contentElement.classList.remove('active');
+      }.bind(this), 150);
+      //this.onHandle('hide');
+    },
+    onClose: function (ev) {
+      const handleName = 'close';
+      this.hide();
+      this.onHandle(handleName, [ev]);
+    },
+    onSubmit: function (ev) {
+      const handleName = 'submit';
+      const form = this.contentElement.querySelector('form');
+      if (form) {
+        const formData = new FormData(form);
+        this.onHandle(handleName, [ev, formData, form]);
+      }
+      else
+        this.onHandle(handleName);
+    },
+    onFormSubmit: function (ev) {
+      const handleName = 'form-submit';
+      this.onHandle(handleName, [ev, new FormData(ev.target), ev.target]);
+
+    },
+    getFormData: function(){
+      const form = this.contentElement.querySelector('form');
+      if(!form) 
+        return null;
+      return new FormData(form);
+    },
+    onDataAction: function (ev) {
+      const handleName = ev.target.dataset.customAction;
+      if (!handleName)
+        return false;
+      this.onHandle(handleName, [ev, this]);
+    },
+    onHandle: function (handleName, args) {
+      if (Object.keys(this.handlers).includes(handleName)) {
+        if (!args) {
+          args = [];
+        }
+        for (const callback of this.handlers[handleName]) {
+          callback.call(this, ...args);
+        }
+      }
+    },
+    getHandle: function (handle) {
+      if (!Object.keys(this.handlers).includes(handle)) {
+        Object.assign(this.handlers, {
+          [handle]: new Array()
+        });
+      }
+      return this.handlers[handle];
+    },
+    on: function (handleName, callback) {
+      let handle = this.getHandle(handleName);
+      handle.push(callback);
+    },
+    destroy: function () {
+      this.hide();
+      this.contentElement.remove();
+    },
+    constants: {
+      contentInsertPlaceholder: '.dialog-content',
+      closeTrigger: '[data-action=close]',
+      dataActionTrigger: '[data-custom-action]',
+      charLimitTrigger: '.char-limit',
+      submitTrigger: '[data-action=submit]',
+      formSubmitTrigger: 'form',
+      formValidationSelector: 'form.bv-form',
+      templates: {
+        wrapper: `<div id="{0}" class="dialog-wrapper fade">
+                        <div class="dialog-overlay"></div>
+                        <div class="dialog-content-wrapper">
+                          <div class="dialog-content">
+                          </div>
+                        </div>
+                  </div>`
+      }
+    }
+
+  }
+  ish.personalized.utils.UI.Overlay = function (options) {
+    this.options = Object.assign({}, {
+      classNames: ''
+    }, options);
+    this.content = `<div class="ish-overlay ${this.options.classNames}"></div>`
+
+  }
+  ish.personalized.utils.UI.Overlay.prototype = {
+    show: function () {
+      if (!this.element) {
+        this.element = Utils.createElementFromHTML(this.content);
+        if (this.options.additionalContent) {
+          this.element.append(Utils.createElementFromHTML(this.options.additionalContent));
+        }
+        document.body.append(this.element);
+      }
+      else
+        this.element.classList.remove('hidden');
+    },
+    hide: function () {
+      if (!this.element)
+        return false;
+      this.element.classList.add('hidden');
+    }
+  }
+  ish.personalized.utils.UI.Zoomable = function (zoomable, options) {
+    this.zoomableElement = zoomable;
+    this.uuid = Utils.UUID();
+    this.handers = new Object();
+    this.currentZoom = 1;
+    this.setOptions(options);
+    this.build();
+    this.bind();
+    document.body.append(this.content);
+  }
+  ish.personalized.utils.UI.Zoomable.prototype = {
+
+    build: async function () {
+      const compiledTemplate = Utils.StringFormat(this.templates.main, [this.templates.svgs.zoomIn, this.templates.svgs.zoomOut]);
+      const compiledElement = Utils.createElementFromHTML(compiledTemplate);
+
+      compiledElement.querySelector(this.constants.previewSelector).append(this.zoomableElement);
+      if (!this.showHeader) {
+        const header = compiledElement.querySelector(this.constants.previewHeaderSelector);
+        if (header)
+          header.remove();
+      }
+      this.content = compiledElement;
+
+    },
+    bind: function () {
+      //zoom controls
+      const zoomIn = this.content.querySelector(this.constants.zoomInSelector)
+      if (zoomIn)
+        zoomIn.addEventListener('click', this.setZoom.bind(this));
+      const zoomOut = this.content.querySelector(this.constants.zoomOutSelector)
+      if (zoomOut)
+        zoomOut.addEventListener('click', this.setZoom.bind(this));
+
+      if (this.customZoomIn)
+        this.customZoomIn.addEventListener('click', this.setZoom.bind(this));
+      if (this.customZoomOut)
+        this.customZoomOut.addEventListener('click', this.setZoom.bind(this));
+
+      var zoomable = this.content.querySelector(this.constants.zoomableSelector);
+      var pos = { top: 0, left: 0, x: 0, y: 0 };
+      var mouseMoveHandler = function (e) {
+        var dx = e.clientX - pos.x;
+        var dy = e.clientY - pos.y;
+
+        zoomable.scrollTop = pos.top - dy;
+        zoomable.scrollLeft = pos.left - dx;
+      };
+      var mouseUpHandler = function () {
+        this.content.removeEventListener('mousemove', mouseMoveHandler);
+        this.content.removeEventListener('mouseup', mouseUpHandler);
+
+        zoomable.style.cursor = 'grab';
+        zoomable.style.removeProperty('user-select');
+      }.bind(this);
+      var mouseDownHandler = function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        zoomable.style.cursor = 'grabbing';
+        zoomable.style.userSelect = 'none';
+        pos = {
+          left: zoomable.scrollLeft,
+          top: zoomable.scrollTop,
+          x: e.clientX,
+          y: e.clientY,
+        };
+
+        this.content.addEventListener('mouseup', mouseUpHandler);
+        this.content.addEventListener('mousemove', mouseMoveHandler);
+      }.bind(this);
+
+      zoomable.addEventListener('mousedown', mouseDownHandler);
+    },
+    getContentElement: function () {
+      return this.content;
+    },
+    setZoom: function (event) {
+      var type = event.currentTarget.classList.contains(this.constants.zoomInType) ? 'in' : 'out',
+        zoomContainer = this.content.querySelector(this.constants.previewSelector),
+        newZoom;
+
+      if (type == 'in') {
+        newZoom = parseFloat(this.currentZoom) + parseFloat(this.constants.zoomStep);
+        var s = 'scale('.concat(newZoom, ')');
+        zoomContainer.style.transform = s;
+      }
+      else {
+        newZoom = parseFloat(this.currentZoom) - parseFloat(this.constants.zoomStep);
+        var s = 'scale('.concat(newZoom, ')');
+        zoomContainer.style.transform = s;
+      }
+      this.currentZoom = newZoom;
+
+    },
+    onHandle: function (handleName, args) {
+      if (Object.keys(this.handlers).includes(handleName)) {
+        if (!args) {
+          args = [];
+        }
+        for (const callback of this.handlers[handleName]) {
+          callback.call(this, ...args);
+        }
+      }
+    },
+    getHandle: function (handle) {
+      if (!Object.keys(this.handlers).includes(handle)) {
+        Object.assign(this.handlers, {
+          [handle]: new Array()
+        });
+      }
+      return this.handlers[handle];
+    },
+    on: function (handleName, callback) {
+      let handle = this.getHandle(handleName);
+      handle.push(callback);
+    },
+    setOptions: function (options) {
+      if (!options)
+        return;
+      if (options.template) {
+        this.templates.main = options.template;
+      }
+      if (options.customZoomControls) {
+        if (options.customZoomControls.zoomIn)
+          this.customZoomIn = options.customZoomControls.zoomIn;
+        if (options.customZoomControls.zoomOut)
+          this.customZoomOut = options.customZoomControls.zoomOut;
+      }
+      if (typeof(options.showHeader) != 'undefined')
+        this.showHeader = options.showHeader;
+      else
+        this.showHeader = true;
+    },
+    constants: {
+      previewSelector: '.preview-zoomable',
+      previewHeaderSelector: '.preview-header',
+      zoomableSelector: '.preview-zoomable-wrapper',
+      zoomInSelector: '.controls .zoom-in-trigger',
+      zoomOutSelector: '.controls .zoom-out-trigger',
+      zoomInType: 'zoom-in-trigger',
+      zoomStep: 0.2,
+    },
+    templates: {
+      main:
+        `<div class= "preview-wrapper">
+            <div class= "preview-header">
+              <div class="legend"></div>
+              <div class="controls">
+                <button class="zoom-in-trigger">
+                  <div class="icon zoom-in">{0}</div>
+                </button>
+                <button class="zoom-out-trigger">
+                  <div class="icon zoom-out">{1}</div>
+                </button>
+              </div>
+          </div>
+          <div class="preview-zoomable-wrapper">
+            <div class="preview-zoomable"></div>
+          </div>
+        </div >`,
+      svgs: {
+        zoomIn: `<svg width="20" height="18" viewBox="0 0 20 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path fill-rule="evenodd" clip-rule="evenodd" d="M8.64463 13.5C12.0399 13.5 14.8025 10.8082 14.8025 7.5C14.8025 4.19175 12.0399 1.5 8.64463 1.5C5.24933 1.5 2.48674 4.19175 2.48674 7.5C2.48674 10.8082 5.24933 13.5 8.64463 13.5ZM18.9699 17.5605C18.3687 18.1462 17.3942 18.1462 16.7931 17.5605L12.8851 13.7528C11.6682 14.5395 10.211 15 8.64463 15C4.40031 15 0.947266 11.6355 0.947266 7.5C0.947266 3.3645 4.40031 0 8.64463 0C12.889 0 16.342 3.3645 16.342 7.5C16.342 9.02625 15.8694 10.446 15.0619 11.6318L18.9699 15.4395C19.571 16.0252 19.571 16.9748 18.9699 17.5605ZM9.41437 6.75H12.4933V8.25H9.41437V11.25H7.8749V8.25H4.79595V6.75H7.8749V3.75H9.41437V6.75Z" fill="#31313D"/>
+                 </svg>`,
+        zoomOut: `<svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path fill-rule="evenodd" clip-rule="evenodd" d="M7.5 13.5C10.8082 13.5 13.5 10.8082 13.5 7.5C13.5 4.19175 10.8082 1.5 7.5 1.5C4.19175 1.5 1.5 4.19175 1.5 7.5C1.5 10.8082 4.19175 13.5 7.5 13.5ZM17.5605 17.5605C16.9748 18.1462 16.0252 18.1462 15.4395 17.5605L11.6318 13.7528C10.446 14.5395 9.02625 15 7.5 15C3.3645 15 0 11.6355 0 7.5C0 3.3645 3.3645 0 7.5 0C11.6355 0 15 3.3645 15 7.5C15 9.02625 14.5395 10.446 13.7528 11.6318L17.5605 15.4395C18.1462 16.0252 18.1462 16.9748 17.5605 17.5605ZM3.75 8.25H11.25V6.75H3.75V8.25Z" fill="#31313D"/>
+                  </svg>`
+      }
+    }
+  }
+}(jQuery, intershop, ishconfig));'use strict';
+(async function (ish, ishcfg, auth0conf) {
+    const UI = ish.utils.UI,
+        Constants = {
+            URL: ishcfg.EmailSearchAPI.url,
+            TIMEOUT: ishcfg.EmailSearchAPI.timeout,
+            TRIGGER_SELECTOR: 'input[name=email_Email]'
+        };
+
+    const trigger = document.querySelector(Constants.TRIGGER_SELECTOR);
+    let cache = new Map();
+
+
+    const overlay = new UI.Overlay({
+        classNames: 'email-search'
+    });
+
+
+    if (!trigger)
+        return true;
+
+    const onBlur = async (ev) => {
+        const input = ev.currentTarget;
+
+        if (!input.validity.valid)
+            return true;
+
+        if (cache.has(input.value)) {
+            togglePopover(input, cache.get(input.value));
+            return true;
+        }
+
+        try {
+            const isEmailExists = await checkEmailExists(input.value);
+
+            cache.set(input.value, isEmailExists);
+
+            if (isEmailExists)
+                auth0conf.emailAddress = input.value;
+            else
+                auth0conf.emailAddress = '';
+
+            togglePopover(input, isEmailExists);
+
+        }
+        catch (ex) {
+            console.error(ex);
+        }
+    }
+
+    const checkEmailExists = async (email) => {
+        const url = new URL(Constants.URL);
+        const fetchReq = await fetch(url, {
+            method: 'POST',
+            mode: 'cors',
+            headers: {
+                'Content-Type': 'application/json',
+                'Caller': 'ONLINE_SHOP'
+            },
+            body: `{"email": "${email}"}`
+        });
+        //400 email invalid
+        if (!fetchReq.ok && fetchReq.status == 400)
+            return false;
+        if (!fetchReq.ok)
+            throw new Error(`emailsearch.getEmail- Exception: ${fetchReq.statusText}`);
+
+        const fetchRes = await fetchReq.json();
+        if (typeof fetchRes.isEmailExists == 'undefined')
+            throw new Error(`emailsearch.getEmail- Exception: Expected key 'isEmailExists' not found. Response is ${JSON.stringify(fetchRes)}`);
+        return fetchRes.isEmailExists;
+    }
+
+    const togglePopover = (container, visible) => {
+        const SELECTOR = '.email-search-tooltip-template';
+        const popoverContent = document.querySelector(SELECTOR);
+        if (!popoverContent)
+            return false;
+
+        if (!$(container).data('bs.popover')) {
+            const placement = window.matchMedia("(max-width: 679px)").matches ? 'bottom' : 'right';
+            $(container).popover({
+                trigger: 'manual',
+                delay: { "show": 100, "hide": 100 },
+                container: 'body',
+                placement: placement,
+                sanitize: false,
+                template: `<div class="popover email-search-popover" role="tooltip"><div class="arrow"></div><h3 class="popover-header"></h3><div class="popover-content"></div></div>`,
+                content: popoverContent.innerHTML,
+                html: true
+            });
+            $(document).on('click', '.email-search-close-trigger', (ev) => {
+                $(container).popover('hide');
+                overlay.hide();
+            })
+        }
+        const isVisible = $(container).data('bs.popover').tip().hasClass('in');
+        if (visible && !isVisible) {
+            $(container).popover('show');
+            overlay.show();
+            analytics.page.pageData.pageCategory = 'checkout';
+            analytics.page.pageData.pageDescription = 'login prompt'; 
+            _satellite.track('shop-navigate');
+        }
+        else if (!visible && isVisible) {
+            $(container).popover('hide');
+            overlay.hide();
+        }
+    }
+
+    trigger.addEventListener('blur', onBlur);
+
+
+}(intershop, ishconfig, auth0config));
+;
